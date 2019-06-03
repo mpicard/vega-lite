@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const vl = require('../build/vega-lite');
-const stringify = require('json-stable-stringify');
+const stringify = require('fast-json-stable-stringify');
 
 var args = require('yargs')
   .demand(0)

@@ -18,7 +18,7 @@ export declare function tickCount(channel: PositionScaleChannel, fieldDef: Field
     signal: string;
 };
 export declare function title(maxLength: number, fieldDef: FieldDef<string>, config: Config): string;
-export declare function values(specifiedAxis: Axis, model: UnitModel, fieldDef: FieldDef<string>, channel: PositionScaleChannel): (string | number | boolean | import("../../../../../../../../../../Users/kanitw/Documents/_code/_idl/_visrec/vega-lite/src/datetime").DateTime | {
+export declare function values(specifiedAxis: Axis, model: UnitModel, fieldDef: FieldDef<string>, channel: PositionScaleChannel): (string | number | boolean | import("../../../../../../../../Users/martin/workspace/batman/vega-lite/src/datetime").DateTime | {
     signal: string;
 })[] | {
     signal: string;

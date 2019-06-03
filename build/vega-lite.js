@@ -221,451 +221,10 @@
       return t;
   }
 
-  var at, // The index of the current character
-      ch, // The current character
-      escapee = {
-          '"':  '"',
-          '\\': '\\',
-          '/':  '/',
-          b:    '\b',
-          f:    '\f',
-          n:    '\n',
-          r:    '\r',
-          t:    '\t'
-      },
-      text,
-
-      error$1 = function (m) {
-          // Call error when something is wrong.
-          throw {
-              name:    'SyntaxError',
-              message: m,
-              at:      at,
-              text:    text
-          };
-      },
-      
-      next = function (c) {
-          // If a c parameter is provided, verify that it matches the current character.
-          if (c && c !== ch) {
-              error$1("Expected '" + c + "' instead of '" + ch + "'");
-          }
-          
-          // Get the next character. When there are no more characters,
-          // return the empty string.
-          
-          ch = text.charAt(at);
-          at += 1;
-          return ch;
-      },
-      
-      number = function () {
-          // Parse a number value.
-          var number,
-              string = '';
-          
-          if (ch === '-') {
-              string = '-';
-              next('-');
-          }
-          while (ch >= '0' && ch <= '9') {
-              string += ch;
-              next();
-          }
-          if (ch === '.') {
-              string += '.';
-              while (next() && ch >= '0' && ch <= '9') {
-                  string += ch;
-              }
-          }
-          if (ch === 'e' || ch === 'E') {
-              string += ch;
-              next();
-              if (ch === '-' || ch === '+') {
-                  string += ch;
-                  next();
-              }
-              while (ch >= '0' && ch <= '9') {
-                  string += ch;
-                  next();
-              }
-          }
-          number = +string;
-          if (!isFinite(number)) {
-              error$1("Bad number");
-          } else {
-              return number;
-          }
-      },
-      
-      string = function () {
-          // Parse a string value.
-          var hex,
-              i,
-              string = '',
-              uffff;
-          
-          // When parsing for string values, we must look for " and \ characters.
-          if (ch === '"') {
-              while (next()) {
-                  if (ch === '"') {
-                      next();
-                      return string;
-                  } else if (ch === '\\') {
-                      next();
-                      if (ch === 'u') {
-                          uffff = 0;
-                          for (i = 0; i < 4; i += 1) {
-                              hex = parseInt(next(), 16);
-                              if (!isFinite(hex)) {
-                                  break;
-                              }
-                              uffff = uffff * 16 + hex;
-                          }
-                          string += String.fromCharCode(uffff);
-                      } else if (typeof escapee[ch] === 'string') {
-                          string += escapee[ch];
-                      } else {
-                          break;
-                      }
-                  } else {
-                      string += ch;
-                  }
-              }
-          }
-          error$1("Bad string");
-      },
-
-      white = function () {
-
-  // Skip whitespace.
-
-          while (ch && ch <= ' ') {
-              next();
-          }
-      },
-
-      word = function () {
-
-  // true, false, or null.
-
-          switch (ch) {
-          case 't':
-              next('t');
-              next('r');
-              next('u');
-              next('e');
-              return true;
-          case 'f':
-              next('f');
-              next('a');
-              next('l');
-              next('s');
-              next('e');
-              return false;
-          case 'n':
-              next('n');
-              next('u');
-              next('l');
-              next('l');
-              return null;
-          }
-          error$1("Unexpected '" + ch + "'");
-      },
-
-      value,  // Place holder for the value function.
-
-      array$1 = function () {
-
-  // Parse an array value.
-
-          var array = [];
-
-          if (ch === '[') {
-              next('[');
-              white();
-              if (ch === ']') {
-                  next(']');
-                  return array;   // empty array
-              }
-              while (ch) {
-                  array.push(value());
-                  white();
-                  if (ch === ']') {
-                      next(']');
-                      return array;
-                  }
-                  next(',');
-                  white();
-              }
-          }
-          error$1("Bad array");
-      },
-
-      object = function () {
-
-  // Parse an object value.
-
-          var key,
-              object = {};
-
-          if (ch === '{') {
-              next('{');
-              white();
-              if (ch === '}') {
-                  next('}');
-                  return object;   // empty object
-              }
-              while (ch) {
-                  key = string();
-                  white();
-                  next(':');
-                  if (Object.hasOwnProperty.call(object, key)) {
-                      error$1('Duplicate key "' + key + '"');
-                  }
-                  object[key] = value();
-                  white();
-                  if (ch === '}') {
-                      next('}');
-                      return object;
-                  }
-                  next(',');
-                  white();
-              }
-          }
-          error$1("Bad object");
-      };
-
-  value = function () {
-
-  // Parse a JSON value. It could be an object, an array, a string, a number,
-  // or a word.
-
-      white();
-      switch (ch) {
-      case '{':
-          return object();
-      case '[':
-          return array$1();
-      case '"':
-          return string();
-      case '-':
-          return number();
-      default:
-          return ch >= '0' && ch <= '9' ? number() : word();
-      }
-  };
-
-  // Return the json_parse function. It will have access to all of the above
-  // functions and variables.
-
-  var parse = function (source, reviver) {
-      var result;
-      
-      text = source;
-      at = 0;
-      ch = ' ';
-      result = value();
-      white();
-      if (ch) {
-          error$1("Syntax error");
-      }
-
-      // If there is a reviver function, we recursively walk the new structure,
-      // passing each name/value pair to the reviver function for possible
-      // transformation, starting with a temporary root object that holds the result
-      // in an empty key. If there is not a reviver function, we simply return the
-      // result.
-
-      return typeof reviver === 'function' ? (function walk(holder, key) {
-          var k, v, value = holder[key];
-          if (value && typeof value === 'object') {
-              for (k in value) {
-                  if (Object.prototype.hasOwnProperty.call(value, k)) {
-                      v = walk(value, k);
-                      if (v !== undefined) {
-                          value[k] = v;
-                      } else {
-                          delete value[k];
-                      }
-                  }
-              }
-          }
-          return reviver.call(holder, key, value);
-      }({'': result}, '')) : result;
-  };
-
-  var escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-      gap,
-      indent,
-      meta = {    // table of character substitutions
-          '\b': '\\b',
-          '\t': '\\t',
-          '\n': '\\n',
-          '\f': '\\f',
-          '\r': '\\r',
-          '"' : '\\"',
-          '\\': '\\\\'
-      },
-      rep;
-
-  function quote(string) {
-      // If the string contains no control characters, no quote characters, and no
-      // backslash characters, then we can safely slap some quotes around it.
-      // Otherwise we must also replace the offending characters with safe escape
-      // sequences.
-      
-      escapable.lastIndex = 0;
-      return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
-          var c = meta[a];
-          return typeof c === 'string' ? c :
-              '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
-      }) + '"' : '"' + string + '"';
-  }
-
-  function str(key, holder) {
-      // Produce a string from holder[key].
-      var i,          // The loop counter.
-          k,          // The member key.
-          v,          // The member value.
-          length,
-          mind = gap,
-          partial,
-          value = holder[key];
-      
-      // If the value has a toJSON method, call it to obtain a replacement value.
-      if (value && typeof value === 'object' &&
-              typeof value.toJSON === 'function') {
-          value = value.toJSON(key);
-      }
-      
-      // If we were called with a replacer function, then call the replacer to
-      // obtain a replacement value.
-      if (typeof rep === 'function') {
-          value = rep.call(holder, key, value);
-      }
-      
-      // What happens next depends on the value's type.
-      switch (typeof value) {
-          case 'string':
-              return quote(value);
-          
-          case 'number':
-              // JSON numbers must be finite. Encode non-finite numbers as null.
-              return isFinite(value) ? String(value) : 'null';
-          
-          case 'boolean':
-          case 'null':
-              // If the value is a boolean or null, convert it to a string. Note:
-              // typeof null does not produce 'null'. The case is included here in
-              // the remote chance that this gets fixed someday.
-              return String(value);
-              
-          case 'object':
-              if (!value) return 'null';
-              gap += indent;
-              partial = [];
-              
-              // Array.isArray
-              if (Object.prototype.toString.apply(value) === '[object Array]') {
-                  length = value.length;
-                  for (i = 0; i < length; i += 1) {
-                      partial[i] = str(i, value) || 'null';
-                  }
-                  
-                  // Join all of the elements together, separated with commas, and
-                  // wrap them in brackets.
-                  v = partial.length === 0 ? '[]' : gap ?
-                      '[\n' + gap + partial.join(',\n' + gap) + '\n' + mind + ']' :
-                      '[' + partial.join(',') + ']';
-                  gap = mind;
-                  return v;
-              }
-              
-              // If the replacer is an array, use it to select the members to be
-              // stringified.
-              if (rep && typeof rep === 'object') {
-                  length = rep.length;
-                  for (i = 0; i < length; i += 1) {
-                      k = rep[i];
-                      if (typeof k === 'string') {
-                          v = str(k, value);
-                          if (v) {
-                              partial.push(quote(k) + (gap ? ': ' : ':') + v);
-                          }
-                      }
-                  }
-              }
-              else {
-                  // Otherwise, iterate through all of the keys in the object.
-                  for (k in value) {
-                      if (Object.prototype.hasOwnProperty.call(value, k)) {
-                          v = str(k, value);
-                          if (v) {
-                              partial.push(quote(k) + (gap ? ': ' : ':') + v);
-                          }
-                      }
-                  }
-              }
-              
-          // Join all of the member texts together, separated with commas,
-          // and wrap them in braces.
-
-          v = partial.length === 0 ? '{}' : gap ?
-              '{\n' + gap + partial.join(',\n' + gap) + '\n' + mind + '}' :
-              '{' + partial.join(',') + '}';
-          gap = mind;
-          return v;
-      }
-  }
-
-  var stringify = function (value, replacer, space) {
-      var i;
-      gap = '';
-      indent = '';
-      
-      // If the space parameter is a number, make an indent string containing that
-      // many spaces.
-      if (typeof space === 'number') {
-          for (i = 0; i < space; i += 1) {
-              indent += ' ';
-          }
-      }
-      // If the space parameter is a string, it will be used as the indent string.
-      else if (typeof space === 'string') {
-          indent = space;
-      }
-
-      // If there is a replacer, it must be a function or an array.
-      // Otherwise, throw an error.
-      rep = replacer;
-      if (replacer && typeof replacer !== 'function'
-      && (typeof replacer !== 'object' || typeof replacer.length !== 'number')) {
-          throw new Error('JSON.stringify');
-      }
-      
-      // Make a fake root object containing our value under the key of ''.
-      // Return the result of stringifying the value.
-      return str('', {'': value});
-  };
-
-  var parse$1 = parse;
-  var stringify$1 = stringify;
-
-  var jsonify = {
-  	parse: parse$1,
-  	stringify: stringify$1
-  };
-
-  var json = typeof JSON !== 'undefined' ? JSON : jsonify;
-
-  var jsonStableStringify = function (obj, opts) {
+  var fastJsonStableStringify = function (data, opts) {
       if (!opts) opts = {};
       if (typeof opts === 'function') opts = { cmp: opts };
-      var space = opts.space || '';
-      if (typeof space === 'number') space = Array(space+1).join(' ');
       var cycles = (typeof opts.cycles === 'boolean') ? opts.cycles : false;
-      var replacer = opts.replacer || function(key, value) { return value; };
 
       var cmp = opts.cmp && (function (f) {
           return function (node) {
@@ -678,67 +237,46 @@
       })(opts.cmp);
 
       var seen = [];
-      return (function stringify (parent, key, node, level) {
-          var indent = space ? ('\n' + new Array(level + 1).join(space)) : '';
-          var colonSeparator = space ? ': ' : ':';
-
+      return (function stringify (node) {
           if (node && node.toJSON && typeof node.toJSON === 'function') {
               node = node.toJSON();
           }
 
-          node = replacer.call(parent, key, node);
+          if (node === undefined) return;
+          if (typeof node == 'number') return isFinite(node) ? '' + node : 'null';
+          if (typeof node !== 'object') return JSON.stringify(node);
 
-          if (node === undefined) {
-              return;
-          }
-          if (typeof node !== 'object' || node === null) {
-              return json.stringify(node);
-          }
-          if (isArray$1(node)) {
-              var out = [];
-              for (var i = 0; i < node.length; i++) {
-                  var item = stringify(node, i, node[i], level+1) || json.stringify(null);
-                  out.push(indent + space + item);
+          var i, out;
+          if (Array.isArray(node)) {
+              out = '[';
+              for (i = 0; i < node.length; i++) {
+                  if (i) out += ',';
+                  out += stringify(node[i]) || 'null';
               }
-              return '[' + out.join(',') + indent + ']';
+              return out + ']';
           }
-          else {
-              if (seen.indexOf(node) !== -1) {
-                  if (cycles) return json.stringify('__cycle__');
-                  throw new TypeError('Converting circular structure to JSON');
-              }
-              else seen.push(node);
 
-              var keys = objectKeys(node).sort(cmp && cmp(node));
-              var out = [];
-              for (var i = 0; i < keys.length; i++) {
-                  var key = keys[i];
-                  var value = stringify(node, key, node[key], level+1);
+          if (node === null) return 'null';
 
-                  if(!value) continue;
-
-                  var keyValue = json.stringify(key)
-                      + colonSeparator
-                      + value;
-                  out.push(indent + space + keyValue);
-              }
-              seen.splice(seen.indexOf(node), 1);
-              return '{' + out.join(',') + indent + '}';
+          if (seen.indexOf(node) !== -1) {
+              if (cycles) return JSON.stringify('__cycle__');
+              throw new TypeError('Converting circular structure to JSON');
           }
-      })({ '': obj }, '', obj, 0);
-  };
 
-  var isArray$1 = Array.isArray || function (x) {
-      return {}.toString.call(x) === '[object Array]';
-  };
+          var seenIndex = seen.push(node) - 1;
+          var keys = Object.keys(node).sort(cmp && cmp(node));
+          out = '';
+          for (i = 0; i < keys.length; i++) {
+              var key = keys[i];
+              var value = stringify(node[key]);
 
-  var objectKeys = Object.keys || function (obj) {
-      var has = Object.prototype.hasOwnProperty || function () { return true };
-      var keys = [];
-      for (var key in obj) {
-          if (has.call(obj, key)) keys.push(key);
-      }
-      return keys;
+              if (!value) continue;
+              if (out) out += ',';
+              out += JSON.stringify(key) + ':' + value;
+          }
+          seen.splice(seenIndex, 1);
+          return '{' + out + '}';
+      })(data);
   };
 
   function isLogicalOr(op) {
@@ -820,7 +358,7 @@
   /**
    * Converts any object into a string representation that can be consumed by humans.
    */
-  var stringify$2 = jsonStableStringify;
+  var stringify = fastJsonStableStringify;
   /**
    * Converts any object into a string of limited size, or a number.
    */
@@ -828,7 +366,7 @@
       if (isNumber(a)) {
           return a;
       }
-      var str = isString(a) ? a : jsonStableStringify(a);
+      var str = isString(a) ? a : fastJsonStableStringify(a);
       // short strings can be used as hash directly, longer strings are hashed to reduce memory usage
       if (str.length < 100) {
           return str;
@@ -1079,7 +617,7 @@
   var util = /*#__PURE__*/Object.freeze({
     pick: pick,
     omit: omit,
-    stringify: stringify$2,
+    stringify: stringify,
     hash: hash,
     contains: contains,
     without: without,
@@ -1711,7 +1249,7 @@
       message.differentParse = differentParse;
       // TRANSFORMS
       function invalidTransformIgnored(transform) {
-          return "Ignoring an invalid transform: " + stringify$2(transform) + ".";
+          return "Ignoring an invalid transform: " + stringify(transform) + ".";
       }
       message.invalidTransformIgnored = invalidTransformIgnored;
       message.NO_FIELDS_NEEDS_AS = 'If "from.fields" is not specified, "as" has to be a string that specifies the key to be used for the data from the secondary source.';
@@ -1722,11 +1260,11 @@
       message.encodingOverridden = encodingOverridden;
       function projectionOverridden(opt) {
           var parentProjection = opt.parentProjection, projection = opt.projection;
-          return "Layer's shared projection " + stringify$2(parentProjection) + " is overridden by a child projection " + stringify$2(projection) + ".";
+          return "Layer's shared projection " + stringify(parentProjection) + " is overridden by a child projection " + stringify(projection) + ".";
       }
       message.projectionOverridden = projectionOverridden;
       function primitiveChannelDef(channel, type, value) {
-          return "Channel " + channel + " is a " + type + ". Converted to {value: " + stringify$2(value) + "}.";
+          return "Channel " + channel + " is a " + type + ". Converted to {value: " + stringify(value) + "}.";
       }
       message.primitiveChannelDef = primitiveChannelDef;
       function invalidFieldType(type) {
@@ -1758,7 +1296,7 @@
       }
       message.droppingColor = droppingColor;
       function emptyFieldDef(fieldDef, channel) {
-          return "Dropping " + stringify$2(fieldDef) + " from channel \"" + channel + "\" since it does not contain data field or value.";
+          return "Dropping " + stringify(fieldDef) + " from channel \"" + channel + "\" since it does not contain data field or value.";
       }
       message.emptyFieldDef = emptyFieldDef;
       function latLongDeprecated(channel, type, newChannel) {
@@ -1800,7 +1338,7 @@
       }
       message.cannotUseScalePropertyWithNonColor = cannotUseScalePropertyWithNonColor;
       function unaggregateDomainHasNoEffectForRawField(fieldDef) {
-          return "Using unaggregated domain with raw field has no effect (" + stringify$2(fieldDef) + ").";
+          return "Using unaggregated domain with raw field has no effect (" + stringify(fieldDef) + ").";
       }
       message.unaggregateDomainHasNoEffectForRawField = unaggregateDomainHasNoEffectForRawField;
       function unaggregateDomainWithNonSharedDomainOp(aggregate) {
@@ -1808,7 +1346,7 @@
       }
       message.unaggregateDomainWithNonSharedDomainOp = unaggregateDomainWithNonSharedDomainOp;
       function unaggregatedDomainWithLogScale(fieldDef) {
-          return "Unaggregated domain is currently unsupported for log scale (" + stringify$2(fieldDef) + ").";
+          return "Unaggregated domain is currently unsupported for log scale (" + stringify(fieldDef) + ").";
       }
       message.unaggregatedDomainWithLogScale = unaggregatedDomainWithLogScale;
       function cannotApplySizeToNonOrientedMark(mark) {
@@ -1836,7 +1374,7 @@
       }
       message.scaleTypeNotWorkWithMark = scaleTypeNotWorkWithMark;
       function mergeConflictingProperty(property, propertyOf, v1, v2) {
-          return "Conflicting " + propertyOf.toString() + " property \"" + property.toString() + "\" (" + stringify$2(v1) + " and " + stringify$2(v2) + ").  Using " + stringify$2(v1) + ".";
+          return "Conflicting " + propertyOf.toString() + " property \"" + property.toString() + "\" (" + stringify(v1) + " and " + stringify(v2) + ").  Using " + stringify(v1) + ".";
       }
       message.mergeConflictingProperty = mergeConflictingProperty;
       function independentScaleMeansIndependentGuide(channel) {
@@ -1844,7 +1382,7 @@
       }
       message.independentScaleMeansIndependentGuide = independentScaleMeansIndependentGuide;
       function domainSortDropped(sort) {
-          return "Dropping sort property " + stringify$2(sort) + " as unioned domains only support boolean or op 'count'.";
+          return "Dropping sort property " + stringify(sort) + " as unioned domains only support boolean or op 'count'.";
       }
       message.domainSortDropped = domainSortDropped;
       message.UNABLE_TO_MERGE_DOMAINS = 'Unable to merge domains';
@@ -1866,7 +1404,7 @@
       message.stackNonSummativeAggregate = stackNonSummativeAggregate;
       // TIMEUNIT
       function invalidTimeUnit(unitName, value) {
-          return "Invalid " + unitName + ": " + stringify$2(value);
+          return "Invalid " + unitName + ": " + stringify(value);
       }
       message.invalidTimeUnit = invalidTimeUnit;
       function dayReplacedWithDate(fullTimeUnit) {
@@ -1874,7 +1412,7 @@
       }
       message.dayReplacedWithDate = dayReplacedWithDate;
       function droppedDay(d) {
-          return "Dropping day from datetime " + stringify$2(d) + " as day cannot be combined with other units.";
+          return "Dropping day from datetime " + stringify(d) + " as day cannot be combined with other units.";
       }
       message.droppedDay = droppedDay;
   })(message || (message = {}));
@@ -4751,7 +4289,7 @@
       }
       return isFunction(defaultRef) ? defaultRef() : defaultRef;
   }
-  function text$1(textDef, config) {
+  function text(textDef, config) {
       // text
       if (textDef) {
           if (isFieldDef(textDef)) {
@@ -4875,7 +4413,7 @@
       return {};
   }
   function baseEncodeEntry(model, ignore) {
-      return __assign({}, markDefProperties(model.markDef, ignore), color(model), nonPosition('opacity', model), tooltip(model), text$2(model, 'href'));
+      return __assign({}, markDefProperties(model.markDef, ignore), color(model), nonPosition('opacity', model), tooltip(model), text$1(model, 'href'));
   }
   function markDefProperties(mark, ignore) {
       return VG_MARK_CONFIGS.reduce(function (m, prop) {
@@ -4960,7 +4498,7 @@
       if (isArray(channelDef)) {
           var keyValues = channelDef.map(function (fieldDef) {
               var key$$1 = fieldDef.title !== undefined ? fieldDef.title : vgField(fieldDef, { binSuffix: 'range' });
-              var value = text$1(fieldDef, model.config).signal;
+              var value = text(fieldDef, model.config).signal;
               return "\"" + key$$1 + "\": " + value;
           });
           return { tooltip: { signal: "{" + keyValues.join(', ') + "}" } };
@@ -4970,13 +4508,13 @@
           return textCommon(model, channel, channelDef);
       }
   }
-  function text$2(model, channel) {
+  function text$1(model, channel) {
       if (channel === void 0) { channel = 'text'; }
       var channelDef = model.encoding[channel];
       return textCommon(model, channel, channelDef);
   }
   function textCommon(model, channel, channelDef) {
-      return wrapCondition(model, channelDef, channel, function (cDef) { return text$1(cDef, model.config); });
+      return wrapCondition(model, channelDef, channel, function (cDef) { return text(cDef, model.config); });
   }
   function bandPosition(fieldDef, channel, model) {
       var _a, _b, _c;
@@ -5196,7 +4734,7 @@
           for (var _i = 0, merged_1 = merged; _i < merged_1.length; _i++) {
               var fieldDef1 = merged_1[_i];
               // If already exists, no need to append to merged array
-              if (stringify$2(fieldDef1) === stringify$2(fdToMerge)) {
+              if (stringify(fieldDef1) === stringify(fdToMerge)) {
                   return;
               }
           }
@@ -5762,7 +5300,7 @@
       else if (v2.explicit && !v1.explicit) {
           return v2;
       }
-      else if (stringify$2(v1.value) === stringify$2(v2.value)) {
+      else if (stringify(v1.value) === stringify(v2.value)) {
           return v1;
       }
       else {
@@ -6095,7 +5633,7 @@
       for (var _i = 0, _a = keys(legendComponentIndex); _i < _a.length; _i++) {
           var channel = _a[_i];
           var scaleComponent = model.getScaleComponent(channel);
-          var domainHash = stringify$2(scaleComponent.domains);
+          var domainHash = stringify(scaleComponent.domains);
           if (legendByDomain[domainHash]) {
               for (var _b = 0, _c = legendByDomain[domainHash]; _b < _c.length; _b++) {
                   var mergedLegendComponent = _c[_b];
@@ -6233,20 +5771,20 @@
           if (first.explicit.hasOwnProperty(prop) &&
               second.explicit.hasOwnProperty(prop) &&
               // some properties might be signals or objects and require hashing for comparison
-              stringify$2(first.get(prop)) === stringify$2(second.get(prop))) {
+              stringify(first.get(prop)) === stringify(second.get(prop))) {
               return true;
           }
           return false;
       });
-      var size = stringify$2(first.size) === stringify$2(second.size);
+      var size = stringify(first.size) === stringify(second.size);
       if (size) {
           if (allPropertiesShared) {
               return first;
           }
-          else if (stringify$2(first.explicit) === stringify$2({})) {
+          else if (stringify(first.explicit) === stringify({})) {
               return second;
           }
-          else if (stringify$2(second.explicit) === stringify$2({})) {
+          else if (stringify(second.explicit) === stringify({})) {
               return first;
           }
       }
@@ -12244,11 +11782,11 @@
       }
   };
 
-  var text$3 = {
+  var text$2 = {
       vgMark: 'text',
       encodeEntry: function (model) {
           var config = model.config, encoding = model.encoding, width = model.width, height = model.height, markDef = model.markDef;
-          return __assign({}, baseEncodeEntry(model, { size: 'ignore', orient: 'ignore' }), pointPosition('x', model, mid(width)), pointPosition('y', model, mid(height)), text$2(model), nonPosition('size', model, __assign({}, (markDef.size ? { defaultValue: markDef.size } : {}), { vgChannel: 'fontSize' // VL's text size is fontSize
+          return __assign({}, baseEncodeEntry(model, { size: 'ignore', orient: 'ignore' }), pointPosition('x', model, mid(width)), pointPosition('y', model, mid(height)), text$1(model), nonPosition('size', model, __assign({}, (markDef.size ? { defaultValue: markDef.size } : {}), { vgChannel: 'fontSize' // VL's text size is fontSize
            })), valueIfDefined('align', align(model.markDef, encoding, config)));
       }
   };
@@ -12308,7 +11846,7 @@
       rect: rect,
       rule: rule,
       square: square,
-      text: text$3,
+      text: text$2,
       tick: tick,
       trail: trail
   };
@@ -13128,8 +12666,8 @@
   	"yaml-front-matter": "^4.0.0"
   };
   var dependencies = {
-  	"@types/json-stable-stringify": "^1.0.32",
-  	"json-stable-stringify": "^1.0.1",
+  	"@types/fast-json-stable-stringify": "~2.0.0",
+  	"fast-json-stable-stringify": "~2.0.0",
   	tslib: "^1.9.2",
   	"vega-event-selector": "^2.0.0",
   	"vega-typings": "^0.3.17",

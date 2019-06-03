@@ -108,8 +108,8 @@
         "yaml-front-matter": "^4.0.0"
     },
     "dependencies": {
-        "@types/json-stable-stringify": "^1.0.32",
-        "json-stable-stringify": "^1.0.1",
+        "@types/fast-json-stable-stringify": "~2.0.0",
+        "fast-json-stable-stringify": "~2.0.0",
         "tslib": "^1.9.2",
         "vega-event-selector": "^2.0.0",
         "vega-typings": "^0.3.17",

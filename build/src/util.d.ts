@@ -1,4 +1,4 @@
-import stableStringify from 'json-stable-stringify';
+import stableStringify from 'fast-json-stable-stringify';
 import { LogicalOperand } from './logical';
 /**
  * Creates an object composed of the picked object properties.

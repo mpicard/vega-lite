@@ -1,5 +1,5 @@
 import * as tslib_1 from "tslib";
-import stableStringify from 'json-stable-stringify';
+import stableStringify from 'fast-json-stable-stringify';
 import { isArray, isNumber, isString, splitAccessPath, stringValue } from 'vega-util';
 import { isLogicalAnd, isLogicalNot, isLogicalOr } from './logical';
 /**
